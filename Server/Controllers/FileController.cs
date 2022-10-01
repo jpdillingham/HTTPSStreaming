@@ -16,7 +16,7 @@ namespace Server.Controllers
         }
 
         private IHubContext<LinkHub> Hub { get; }
-        private static ConcurrentDictionary<string, TaskCompletionSource<Stream>> Streams { get; } = new();
+        private static ConcurrentDictionary<string, TaskCompletionSource<string>> WaitingFiles { get; } = new();
 
         [HttpGet("{filename}")]
         public async Task<IActionResult> Get(string filename)
@@ -24,9 +24,9 @@ namespace Server.Controllers
             Console.WriteLine($"Requesting {filename} from link");
             await Hub.SendRequest(filename);
 
-            var tcs = new TaskCompletionSource<Stream>();
+            var tcs = new TaskCompletionSource<string>();
 
-            if (Streams.TryAdd(filename, tcs))
+            if (WaitingFiles.TryAdd(filename, tcs))
             {
                 try
                 {
@@ -36,8 +36,9 @@ namespace Server.Controllers
                     if (task == tcs.Task)
                     {
                         Console.WriteLine("Got the stream! Trying to write it back out...");
-                        var stream = await tcs.Task;
-                        return File(stream, "application/octet-stream");
+                        var tempFilename = await tcs.Task;
+                        var stream = new FileStream(tempFilename, FileMode.Open, FileAccess.Read);
+                        return File(stream, "application/octet-stream", fileDownloadName: filename);
                     }
                     else
                     {
@@ -46,7 +47,7 @@ namespace Server.Controllers
                 }
                 finally
                 {
-                    Streams.TryRemove(filename, out _);
+                    WaitingFiles.TryRemove(filename, out _);
                 }
             }
             else
@@ -56,16 +57,23 @@ namespace Server.Controllers
         }
 
         [HttpPost("{filename}")]
-        public IActionResult Post(string filename)
+        public async Task<IActionResult> Post(string filename)
         {
             Console.WriteLine($"File POSTed: {filename}");
 
-            var stream = Request.Form.Files.First().OpenReadStream();
-
-            if (Streams.TryGetValue(filename, out var tcs))
+            if (WaitingFiles.TryGetValue(filename, out var tcs))
             {
+                var stream = Request.Form.Files.First().OpenReadStream();
+
+                var temp = Path.GetTempFileName();
+                var destinationStream = new FileStream(temp, FileMode.Create);
+                await stream.CopyToAsync(destinationStream);
+                await destinationStream.FlushAsync();
+                stream.Dispose();
+                destinationStream.Dispose();
+
                 Console.WriteLine("Setting result with stream...");
-                tcs.TrySetResult(stream);
+                tcs.TrySetResult(temp);
             }
             else
             {
