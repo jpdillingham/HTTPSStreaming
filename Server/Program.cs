@@ -1,3 +1,5 @@
+using Server.Hubs;
+
 namespace Server
 {
     public class Program
@@ -12,6 +14,7 @@ namespace Server
             // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerGen();
+            builder.Services.AddSignalR();
 
             var app = builder.Build();
 
@@ -28,6 +31,8 @@ namespace Server
 
 
             app.MapControllers();
+
+            app.MapHub<LinkHub>("/hubs/link");
 
             app.Run();
         }
