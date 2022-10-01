@@ -31,7 +31,7 @@ namespace Server.Controllers
                 try
                 {
                     Console.WriteLine($"Added {filename} record. Waiting on file from link...");
-                    var task = await Task.WhenAny(tcs.Task, Task.Delay(5000));
+                    var task = await Task.WhenAny(tcs.Task, Task.Delay(60000));
 
                     if (task == tcs.Task)
                     {
